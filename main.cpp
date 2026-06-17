@@ -4,16 +4,22 @@
 #include <sstream>
 #include <iomanip>
 using namespace std;
+
 struct Voto {
     string idVotante;
     string opcion;
 
-    Voto(string id, string op) {
+    // MEJORA A: Parametros pasados por const-ref en lugar de por valor,
+    // evitando copias innecesarias de los strings al construir un Voto.
+    Voto(const string& id, const string& op) {
         idVotante = id;
         opcion = op;
     }
 };
-string generarHash(string texto) {
+
+// MEJORA A: Parametro "texto" pasado por const-ref en lugar de por valor,
+// evitando copiar el string completo cada vez que se llama a generarHash().
+string generarHash(const string& texto) {
     unsigned long long hash = 0;
 
     for (char c : texto) {
@@ -24,20 +30,37 @@ string generarHash(string texto) {
     ss << hex << setw(16) << setfill('0') << hash;
     return ss.str();
 }
+
 class Block {
-public:
+// MEJORA B: Los atributos pasan de publicos a privados para proteger
+// el estado interno del bloque y evitar modificaciones externas directas.
+private:
     int index;
     string previousHash;
     vector<Voto> votos;
     int nonce;
     string currentHash;
-    Block(int idx, string hashAnterior, vector<Voto> listaVotos) {
+
+public:
+    // MEJORA A: Parametros "hashAnterior" y "listaVotos" pasados por const-ref
+    // en lugar de por valor, evitando copias al construir cada bloque.
+    // MEJORA B: Se mantiene el constructor publico para poder crear bloques.
+    Block(int idx, const string& hashAnterior, const vector<Voto>& listaVotos) {
         index = idx;
         previousHash = hashAnterior;
         votos = listaVotos;
         nonce = 0;
         currentHash = calcularHash();
     }
+
+    // MEJORA B: Getters publicos para acceder a los atributos privados
+    // desde Blockchain, MesaElectoral y cualquier otra clase que lo necesite.
+    int           getIndex()        const { return index; }
+    string        getPreviousHash() const { return previousHash; }
+    string        getCurrentHash()  const { return currentHash; }
+    int           getNonce()        const { return nonce; }
+    vector<Voto>  getVotos()        const { return votos; }
+
     string calcularHash() const {
         stringstream datos;
         datos << index << previousHash << nonce;
@@ -46,17 +69,20 @@ public:
         }
         return generarHash(datos.str());
     }
+
     void mineBlock(int dificultad) {
         string prefijo(dificultad, '0');
         while (currentHash.substr(0, dificultad) != prefijo) {
             nonce++;
             currentHash = calcularHash();
         }
-        cout << "Bloque #" << index << " fue minado correctamente." << endl;
-        cout << "Nonce encontrado: " << nonce << endl;
-        cout << "Hash final: " << currentHash << endl;
+        // MEJORA B: Se usan los getters en lugar de acceder directo al atributo.
+        cout << "Bloque #" << getIndex() << " fue minado correctamente." << endl;
+        cout << "Nonce encontrado: " << getNonce() << endl;
+        cout << "Hash final: " << getCurrentHash() << endl;
     }
 };
+
 class Blockchain {
 private:
     vector<Block> cadena;
@@ -66,48 +92,56 @@ public:
         Block bloqueGenesis(0, "0", votosIniciales);
         cadena.push_back(bloqueGenesis);
     }
+
     Block obtenerUltimoBloque() const {
         return cadena.back();
     }
+
     void agregarBloque(Block bloque) {
         cadena.push_back(bloque);
     }
+
     bool verificarBloque(Block bloque, int dificultad) const {
         string prefijo(dificultad, '0');
 
-        if (bloque.currentHash != bloque.calcularHash()) {
+        // MEJORA B: Se usan getters en lugar de acceso directo a atributos publicos.
+        if (bloque.getCurrentHash() != bloque.calcularHash()) {
             return false;
         }
-        if (bloque.currentHash.substr(0, dificultad) != prefijo) {
+        if (bloque.getCurrentHash().substr(0, dificultad) != prefijo) {
             return false;
         }
-        if (bloque.previousHash != cadena.back().currentHash) {
+        if (bloque.getPreviousHash() != cadena.back().getCurrentHash()) {
             return false;
         }
         return true;
     }
+
     bool cadenaEsValida() const {
         for (int i = 1; i < cadena.size(); i++) {
-            if (cadena[i].currentHash != cadena[i].calcularHash()) {
+            // MEJORA B: Se usan getters en lugar de acceso directo a atributos publicos.
+            if (cadena[i].getCurrentHash() != cadena[i].calcularHash()) {
                 return false;
             }
-            if (cadena[i].previousHash != cadena[i - 1].currentHash) {
+            if (cadena[i].getPreviousHash() != cadena[i - 1].getCurrentHash()) {
                 return false;
             }
         }
         return true;
     }
+
     void mostrarCadena() const {
         for (const Block& bloque : cadena) {
-            cout << "\nBloque #" << bloque.index << endl;
-            cout << "Hash anterior: " << bloque.previousHash << endl;
-            cout << "Hash actual: " << bloque.currentHash << endl;
-            cout << "Nonce: " << bloque.nonce << endl;
-            if (bloque.votos.empty()) {
+            // MEJORA B: Se usan getters en lugar de acceso directo a atributos publicos.
+            cout << "\nBloque #" << bloque.getIndex() << endl;
+            cout << "Hash anterior: " << bloque.getPreviousHash() << endl;
+            cout << "Hash actual: " << bloque.getCurrentHash() << endl;
+            cout << "Nonce: " << bloque.getNonce() << endl;
+            if (bloque.getVotos().empty()) {
                 cout << "Bloque inicial sin votos." << endl;
             } else {
                 cout << "Votos registrados:" << endl;
-                for (const Voto& voto : bloque.votos) {
+                for (const Voto& voto : bloque.getVotos()) {
                     cout << "- " << voto.idVotante << " voto por "
                          << voto.opcion << endl;
                 }
@@ -115,11 +149,13 @@ public:
         }
     }
 };
+
 class MesaElectoralObserver {
 public:
     virtual void update(Block nuevoBloque) = 0;
     virtual ~MesaElectoralObserver() {}
 };
+
 class MesaElectoral : public MesaElectoralObserver {
 private:
     string nombre;
@@ -127,16 +163,21 @@ private:
     int dificultad;
 
 public:
-    MesaElectoral(string nombreMesa, int dificultadRed) {
+    // MEJORA A: Parametro "nombreMesa" pasado por const-ref en lugar de por valor.
+    MesaElectoral(const string& nombreMesa, int dificultadRed) {
         nombre = nombreMesa;
         dificultad = dificultadRed;
     }
-    Block registrarVotos(vector<Voto> votos) {
+
+    // MEJORA A: Parametro "votos" pasado por const-ref en lugar de por valor,
+    // evitando copiar el vector completo de votos en cada llamada.
+    Block registrarVotos(const vector<Voto>& votos) {
         Block ultimoBloque = blockchain.obtenerUltimoBloque();
 
+        // MEJORA B: Se usan getters para leer los datos del ultimo bloque.
         Block nuevoBloque(
-            ultimoBloque.index + 1,
-            ultimoBloque.currentHash,
+            ultimoBloque.getIndex() + 1,
+            ultimoBloque.getCurrentHash(),
             votos
         );
         cout << "\n" << nombre << " esta minando un nuevo bloque..." << endl;
@@ -144,6 +185,7 @@ public:
         blockchain.agregarBloque(nuevoBloque);
         return nuevoBloque;
     }
+
     void update(Block nuevoBloque) override {
         cout << "\n" << nombre << " recibio un bloque nuevo." << endl;
         if (blockchain.verificarBloque(nuevoBloque, dificultad)) {
@@ -153,16 +195,19 @@ public:
             cout << nombre << " rechazo el bloque porque no era valido." << endl;
         }
     }
+
     void mostrarBlockchain() const {
         cout << "\n==============================" << endl;
         cout << nombre << endl;
         cout << "==============================" << endl;
         blockchain.mostrarCadena();
     }
+
     bool estaCorrecta() const {
         return blockchain.cadenaEsValida();
     }
 };
+
 class CentroElectoralSubject {
 private:
     vector<MesaElectoralObserver*> mesasRegistradas;
@@ -178,6 +223,7 @@ public:
         }
     }
 };
+
 int main() {
     int dificultad = 2;
     CentroElectoralSubject redElectoral;
